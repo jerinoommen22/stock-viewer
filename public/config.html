@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Configuration - Stock Viewer</title>
+    <link rel="stylesheet" href="/css/styles.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="container config-container">
+        <header class="header">
+            <div class="header-left">
+                <a href="/" class="back-btn">← Back to Dashboard</a>
+            </div>
+            <div class="header-center">
+                <h1>Configuration</h1>
+            </div>
+            <div class="header-right"></div>
+        </header>
+
+        <main class="config-main">
+            <div class="config-section">
+                <h2>Stock Tickers</h2>
+                <p class="config-description">Add stock symbols to display on your dashboard (e.g., AAPL, TSLA, MSFT)</p>
+                
+                <div class="add-ticker-form">
+                    <input 
+                        type="text" 
+                        id="ticker-input" 
+                        placeholder="Enter stock symbol (e.g., AAPL)" 
+                        maxlength="10"
+                    >
+                    <button id="add-ticker-btn" class="btn btn-primary">Add Ticker</button>
+                </div>
+
+                <div id="ticker-list" class="ticker-list">
+                    <!-- Ticker items will be inserted here -->
+                </div>
+            </div>
+
+            <div class="config-section">
+                <h2>Weather Location</h2>
+                <p class="config-description">Enter your city name or ZIP code</p>
+                
+                <div class="weather-form">
+                    <input 
+                        type="text" 
+                        id="weather-input" 
+                        placeholder="e.g., New York or 10001"
+                    >
+                </div>
+            </div>
+
+            <div class="config-section">
+                <h2>Refresh Interval</h2>
+                <p class="config-description">How often to update stock prices (in seconds)</p>
+                
+                <div class="interval-form">
+                    <input 
+                        type="number" 
+                        id="interval-input" 
+                        min="5" 
+                        max="60" 
+                        step="5"
+                    >
+                    <span class="input-suffix">seconds</span>
+                </div>
+            </div>
+
+            <div class="config-actions">
+                <button id="save-config-btn" class="btn btn-success">Save Configuration</button>
+                <button id="reset-config-btn" class="btn btn-secondary">Reset to Defaults</button>
+            </div>
+
+            <div id="save-message" class="save-message hidden"></div>
+        </main>
+    </div>
+
+    <script src="/js/config.js"></script>
+</body>
+</html>
+
