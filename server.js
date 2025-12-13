@@ -14,6 +14,12 @@ const io = socketIo(server)
 const PORT = process.env.PORT || 3000
 const CONFIG_FILE = path.join(__dirname, 'config.json')
 
+// Spotify configuration
+const SPOTIFY_CLIENT_ID = process.env.SPOTIFY_CLIENT_ID
+const SPOTIFY_CLIENT_SECRET = process.env.SPOTIFY_CLIENT_SECRET
+const SPOTIFY_REDIRECT_URI =
+  process.env.SPOTIFY_REDIRECT_URI || `http://localhost:${PORT}/config.html`
+
 // Middleware
 app.use(express.json())
 app.use(express.static('public'))
@@ -23,6 +29,13 @@ const defaultConfig = {
   tickers: ['AAPL', 'TSLA', 'MSFT', 'GOOGL'],
   weatherLocation: 'New York',
   refreshInterval: 15000, // 15 seconds
+  spotify: {
+    enabled: false,
+    accessToken: null,
+    refreshToken: null,
+    tokenExpiresAt: null,
+    selectedItem: null,
+  },
 }
 
 // Load or create config
@@ -479,6 +492,157 @@ app.get('/api/weather', async (req, res) => {
 
 app.get('/api/market-status', (req, res) => {
   res.json(getMarketStatus())
+})
+
+// Spotify API Routes
+app.get('/api/spotify/auth-url', (req, res) => {
+  if (!SPOTIFY_CLIENT_ID) {
+    return res.status(500).json({error: 'Spotify client ID not configured'})
+  }
+
+  const scopes = [
+    'user-read-playback-state',
+    'user-modify-playback-state',
+    'user-read-currently-playing',
+    'streaming',
+    'playlist-read-private',
+    'playlist-read-collaborative',
+  ].join(' ')
+
+  const authUrl =
+    `https://accounts.spotify.com/authorize?` +
+    `client_id=${SPOTIFY_CLIENT_ID}&` +
+    `response_type=code&` +
+    `redirect_uri=${encodeURIComponent(SPOTIFY_REDIRECT_URI)}&` +
+    `scope=${encodeURIComponent(scopes)}`
+
+  res.json({authUrl})
+})
+
+app.post('/api/spotify/callback', async (req, res) => {
+  try {
+    const {code} = req.body
+
+    if (!code) {
+      return res.status(400).json({error: 'No authorization code provided'})
+    }
+
+    if (!SPOTIFY_CLIENT_ID || !SPOTIFY_CLIENT_SECRET) {
+      return res.status(500).json({error: 'Spotify credentials not configured'})
+    }
+
+    // Exchange code for access token
+    const response = await axios.post(
+      'https://accounts.spotify.com/api/token',
+      new URLSearchParams({
+        grant_type: 'authorization_code',
+        code: code,
+        redirect_uri: SPOTIFY_REDIRECT_URI,
+      }),
+      {
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          Authorization: `Basic ${Buffer.from(
+            `${SPOTIFY_CLIENT_ID}:${SPOTIFY_CLIENT_SECRET}`,
+          ).toString('base64')}`,
+        },
+      },
+    )
+
+    const {access_token, refresh_token, expires_in} = response.data
+
+    // Store tokens in config
+    const config = await loadConfig()
+    config.spotify = config.spotify || {}
+    config.spotify.accessToken = access_token
+    config.spotify.refreshToken = refresh_token
+    config.spotify.tokenExpiresAt = Date.now() + expires_in * 1000
+    await saveConfig(config)
+
+    res.json({accessToken: access_token})
+  } catch (error) {
+    console.error('Error exchanging Spotify code:', error.message)
+    res.status(500).json({error: 'Failed to exchange authorization code'})
+  }
+})
+
+app.get('/api/spotify/search', async (req, res) => {
+  try {
+    const query = req.query.q
+    if (!query) {
+      return res.status(400).json({error: 'Query parameter required'})
+    }
+
+    const authHeader = req.headers.authorization
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({error: 'Authorization required'})
+    }
+
+    const accessToken = authHeader.replace('Bearer ', '')
+
+    // Search for tracks and playlists
+    const [tracksResponse, playlistsResponse] = await Promise.all([
+      axios
+        .get(
+          `https://api.spotify.com/v1/search?q=${encodeURIComponent(
+            query,
+          )}&type=track&limit=10`,
+          {
+            headers: {Authorization: `Bearer ${accessToken}`},
+          },
+        )
+        .catch(() => ({data: {tracks: {items: []}}})),
+      axios
+        .get(
+          `https://api.spotify.com/v1/search?q=${encodeURIComponent(
+            query,
+          )}&type=playlist&limit=10`,
+          {
+            headers: {Authorization: `Bearer ${accessToken}`},
+          },
+        )
+        .catch(() => ({data: {playlists: {items: []}}})),
+    ])
+
+    const tracks = tracksResponse.data.tracks?.items || []
+    const playlists = playlistsResponse.data.playlists?.items || []
+
+    // Combine and format results
+    const items = [
+      ...tracks
+        .filter(track => track && track.id && track.uri) // Filter out invalid tracks
+        .map(track => ({
+          id: track.id,
+          type: 'track',
+          name: track.name || 'Unknown Track',
+          artist:
+            track.artists?.map(a => a.name).join(', ') || 'Unknown Artist',
+          artists: track.artists || [],
+          uri: track.uri,
+          images: track.album?.images || [],
+        })),
+      ...playlists
+        .filter(playlist => playlist && playlist.id && playlist.uri) // Filter out invalid playlists
+        .map(playlist => ({
+          id: playlist.id,
+          type: 'playlist',
+          name: playlist.name || 'Unknown Playlist',
+          artist: playlist.owner?.display_name || 'Spotify',
+          artists: [{name: playlist.owner?.display_name || 'Spotify'}],
+          uri: playlist.uri,
+          images: playlist.images || [],
+        })),
+    ]
+
+    res.json({items})
+  } catch (error) {
+    console.error('Error searching Spotify:', error.message)
+    if (error.response?.status === 401) {
+      res.status(401).json({error: 'Invalid or expired token'})
+    } else {
+      res.status(500).json({error: 'Failed to search Spotify'})
+    }
+  }
 })
 
 // Store active socket connections and their intervals

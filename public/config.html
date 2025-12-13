@@ -70,6 +70,46 @@
                 </div>
             </div>
 
+            <div class="config-section">
+                <h2>Spotify Music</h2>
+                <p class="config-description">Search and select a playlist or song to play on the dashboard</p>
+                
+                <div id="spotify-auth-section" class="spotify-auth-section">
+                    <button id="spotify-login-btn" class="btn btn-primary">Connect to Spotify</button>
+                    <p class="spotify-note">Note: You need a Spotify Premium account to play music</p>
+                </div>
+
+                <div id="spotify-search-section" class="spotify-search-section hidden">
+                    <div class="spotify-search-form">
+                        <input 
+                            type="text" 
+                            id="spotify-search-input" 
+                            placeholder="Search for playlists or songs..."
+                        >
+                        <button id="spotify-search-btn" class="btn btn-primary">Search</button>
+                    </div>
+                    
+                    <div id="spotify-results" class="spotify-results">
+                        <!-- Search results will appear here -->
+                    </div>
+
+                    <div id="spotify-selected" class="spotify-selected hidden">
+                        <h3>Currently Selected:</h3>
+                        <div id="spotify-selected-content"></div>
+                        <div class="spotify-player-controls">
+                            <button id="spotify-prev-btn" class="btn btn-secondary">⏮ Previous</button>
+                            <button id="spotify-play-pause-btn" class="btn btn-primary">▶ Play</button>
+                            <button id="spotify-next-btn" class="btn btn-secondary">Next ⏭</button>
+                            <div class="spotify-volume-control">
+                                <label>Volume:</label>
+                                <input type="range" id="spotify-volume-slider" min="0" max="100" value="50">
+                            </div>
+                        </div>
+                        <button id="spotify-clear-btn" class="btn btn-secondary">Clear Selection</button>
+                    </div>
+                </div>
+            </div>
+
             <div class="config-actions">
                 <button id="save-config-btn" class="btn btn-success">Save Configuration</button>
                 <button id="reset-config-btn" class="btn btn-secondary">Reset to Defaults</button>
@@ -79,7 +119,15 @@
         </main>
     </div>
 
+    <script src="https://sdk.scdn.co/spotify-player.js"></script>
     <script src="/js/config.js"></script>
+    <script>
+        // Wait for Spotify SDK to load
+        window.onSpotifyWebPlaybackSDKReady = () => {
+            console.log('Spotify Web Playback SDK ready');
+        };
+    </script>
 </body>
 </html>
+
 

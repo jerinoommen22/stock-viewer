@@ -12,10 +12,20 @@ const weatherIconImg = document.getElementById('weather-icon-img');
 const marketClosedBanner = document.getElementById('market-closed-banner');
 const connectionStatus = document.getElementById('connection-status');
 
+// Spotify Player Elements (removed - no UI on dashboard)
+
 // State
 let currentStocks = [];
 let isConnected = false;
 let charts = {}; // Store chart instances
+
+// Spotify State
+let spotifyPlayerInstance = null;
+let spotifyDeviceId = null;
+let spotifyAccessToken = null;
+let spotifyCurrentTrack = null;
+let spotifyIsPlaying = false;
+let spotifyConfig = null;
 
 // Format price with proper decimals
 function formatPrice(price) {
@@ -617,6 +627,149 @@ init();
 document.addEventListener('visibilitychange', () => {
     if (!document.hidden && !isConnected) {
         socket.connect();
+    }
+});
+
+// Spotify Functions
+async function loadSpotifyConfig() {
+    try {
+        const response = await fetch('/api/config');
+        if (!response.ok) return;
+        const config = await response.json();
+        spotifyConfig = config.spotify;
+        
+        if (spotifyConfig && spotifyConfig.enabled && spotifyConfig.accessToken && spotifyConfig.selectedItem) {
+            spotifyAccessToken = spotifyConfig.accessToken;
+            await initializeSpotifyPlayer();
+        }
+    } catch (error) {
+        console.error('Error loading Spotify config:', error);
+    }
+}
+
+async function initializeSpotifyPlayer() {
+    if (!window.Spotify) {
+        console.error('Spotify Web Playback SDK not loaded');
+        return;
+    }
+
+    try {
+        spotifyPlayerInstance = new Spotify.Player({
+            name: 'Stock Viewer Player',
+            getOAuthToken: cb => {
+                cb(spotifyAccessToken);
+            },
+            volume: 0.5
+        });
+
+        // Error handling
+        spotifyPlayerInstance.addListener('initialization_error', ({message}) => {
+            console.error('Spotify initialization error:', message);
+        });
+
+        spotifyPlayerInstance.addListener('authentication_error', ({message}) => {
+            console.error('Spotify authentication error:', message);
+        });
+
+        spotifyPlayerInstance.addListener('account_error', ({message}) => {
+            console.error('Spotify account error:', message);
+        });
+
+        // Ready
+        spotifyPlayerInstance.addListener('ready', ({device_id}) => {
+            console.log('Spotify player ready with device ID:', device_id);
+            spotifyDeviceId = device_id;
+            
+            // Auto-play the selected item (no UI controls on dashboard)
+            if (spotifyConfig && spotifyConfig.selectedItem) {
+                playSpotifyItem(spotifyConfig.selectedItem);
+            }
+        });
+
+        // Not ready
+        spotifyPlayerInstance.addListener('not_ready', ({device_id}) => {
+            console.log('Spotify device has gone offline:', device_id);
+        });
+
+        // Player state changed
+        spotifyPlayerInstance.addListener('player_state_changed', state => {
+            if (!state) return;
+            
+            spotifyIsPlaying = !state.paused;
+            
+            const track = state.track_window.current_track;
+            if (track) {
+                spotifyCurrentTrack = track;
+            }
+        });
+
+        // Connect to the player
+        await spotifyPlayerInstance.connect();
+    } catch (error) {
+        console.error('Error initializing Spotify player:', error);
+    }
+}
+
+async function playSpotifyItem(item) {
+    if (!spotifyDeviceId || !spotifyAccessToken) {
+        console.log('Spotify not initialized yet, will retry...');
+        // Retry after a short delay
+        setTimeout(() => {
+            if (spotifyDeviceId && spotifyAccessToken) {
+                playSpotifyItem(item);
+            }
+        }, 1000);
+        return;
+    }
+
+    try {
+        const response = await fetch(`https://api.spotify.com/v1/me/player/play?device_id=${spotifyDeviceId}`, {
+            method: 'PUT',
+            headers: {
+                'Authorization': `Bearer ${spotifyAccessToken}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                context_uri: item.type === 'playlist' ? item.uri : null,
+                uris: item.type === 'track' ? [item.uri] : null
+            })
+        });
+
+        if (!response.ok) {
+            const error = await response.text();
+            console.error('Error playing Spotify item:', error);
+        } else {
+            spotifyIsPlaying = true;
+            console.log('Spotify playback started:', item.name);
+        }
+    } catch (error) {
+        console.error('Error playing Spotify:', error);
+    }
+}
+
+// Player controls removed from dashboard - only on config page
+
+// Listen for config changes to update Spotify
+socket.on('configChanged', async () => {
+    await loadSpotifyConfig();
+});
+
+// Initialize Spotify when page loads
+window.addEventListener('load', () => {
+    // Wait for Spotify SDK to load
+    if (window.Spotify) {
+        loadSpotifyConfig();
+    } else {
+        // Wait for SDK ready callback
+        window.onSpotifyWebPlaybackSDKReady = () => {
+            loadSpotifyConfig();
+        };
+        // Also retry after a delay as fallback
+        setTimeout(() => {
+            if (window.Spotify) {
+                loadSpotifyConfig();
+            }
+        }, 2000);
     }
 });
 

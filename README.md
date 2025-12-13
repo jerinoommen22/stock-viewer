@@ -17,6 +17,7 @@ A beautiful, modern stock market dashboard designed for TV displays and Raspberr
 🔄 **Auto-reconnect** - Maintains connection even if network drops
 💻 **Raspberry Pi Optimized** - Lightweight and efficient
 🎯 **Smart API Usage** - Stops stock API calls when market is closed
+🎵 **Spotify Integration** - Play your favorite playlists and songs on the dashboard
 
 ## Screenshots
 
@@ -32,6 +33,7 @@ A beautiful, modern stock market dashboard designed for TV displays and Raspberr
 - Add/remove stock tickers
 - Set weather location
 - Adjust refresh interval
+- Connect to Spotify and select playlists/songs
 
 ## Prerequisites
 
@@ -40,6 +42,7 @@ A beautiful, modern stock market dashboard designed for TV displays and Raspberr
 - Free API keys:
   - [Finnhub](https://finnhub.io/) - Stock market data (required)
   - Weather is provided by Open-Meteo (no API key needed!)
+- **Spotify Premium** account (optional, for music playback)
 
 ## Installation
 
@@ -71,6 +74,12 @@ FINNHUB_API_KEY=your_finnhub_api_key_here
 
 # Server Port (optional, defaults to 3000)
 PORT=3000
+
+# Spotify API Credentials (Optional - Get from https://developer.spotify.com/dashboard)
+# Note: You need a Spotify Premium account to play music
+SPOTIFY_CLIENT_ID=your_spotify_client_id_here
+SPOTIFY_CLIENT_SECRET=your_spotify_client_secret_here
+SPOTIFY_REDIRECT_URI=http://localhost:3000/config.html
 ```
 
 ## Getting API Keys
@@ -84,6 +93,14 @@ PORT=3000
 
 ### Weather (No API Key Needed!)
 Weather data is provided by [Open-Meteo](https://open-meteo.com/) - completely free with no API key required! 🎉
+
+### Spotify (Optional - Music Playback)
+1. Go to [Spotify Developer Dashboard](https://developer.spotify.com/dashboard)
+2. Create a new app
+3. Copy your Client ID and Client Secret
+4. Add `http://localhost:3000/config.html` (or your server URL) to Redirect URIs
+5. **Note**: You need a Spotify Premium account to play music
+6. Add credentials to your `.env` file
 
 ## Usage
 
@@ -121,8 +138,9 @@ http://YOUR_RASPBERRY_PI_IP:3000
 2. Add stock tickers (e.g., AAPL, TSLA, MSFT, GOOGL)
 3. Set your weather location (city name or ZIP code)
 4. Adjust refresh interval (5-60 seconds)
-5. Click "Save Configuration"
-6. Return to dashboard
+5. (Optional) Connect to Spotify and select a playlist or song
+6. Click "Save Configuration"
+7. Return to dashboard
 
 ## Raspberry Pi Setup
 
@@ -215,7 +233,12 @@ The app stores configuration in `config.json`:
 {
   "tickers": ["AAPL", "TSLA", "MSFT", "GOOGL"],
   "weatherLocation": "New York",
-  "refreshInterval": 15000
+  "refreshInterval": 15000,
+  "spotify": {
+    "enabled": false,
+    "accessToken": null,
+    "selectedItem": null
+  }
 }
 ```
 
@@ -350,6 +373,7 @@ If you encounter any issues:
 ## Future Enhancements
 
 - [x] Historical price charts (7-day)
+- [x] Spotify music integration
 - [ ] Extended historical data (30-day, 90-day)
 - [ ] Crypto support
 - [ ] Multiple themes
