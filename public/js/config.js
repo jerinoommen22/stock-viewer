@@ -24,6 +24,8 @@ const spotifyPlayPauseBtn = document.getElementById('spotify-play-pause-btn');
 const spotifyPrevBtn = document.getElementById('spotify-prev-btn');
 const spotifyNextBtn = document.getElementById('spotify-next-btn');
 const spotifyVolumeSlider = document.getElementById('spotify-volume-slider');
+const spotifyStatusText = document.getElementById('spotify-status-text');
+const spotifyInitBtn = document.getElementById('spotify-init-btn');
 
 // State
 let config = {
@@ -107,9 +109,11 @@ function updateSpotifyUI() {
             renderSelectedSpotifyItem(config.spotify.selectedItem);
         }
         
-        // Initialize player if not already initialized
-        if (!spotifyPlayerInstance) {
-            initSpotifyPlayer();
+        // Initialize player if not already initialized (with delay to ensure SDK is ready)
+        if (!spotifyPlayerInstance && window.Spotify) {
+            setTimeout(() => {
+                initSpotifyPlayer();
+            }, 2000);
         }
     } else {
         spotifyAuthSection.classList.remove('hidden');
@@ -127,6 +131,15 @@ function renderSelectedSpotifyItem(item) {
             <div class="spotify-selected-type">${item.type}${item.artist ? ` • ${item.artist}` : ''}</div>
         </div>
     `;
+    
+    // Update player status
+    if (spotifyDeviceId && spotifyPlayerInstance) {
+        updatePlayerStatus('ready', 'Player ready');
+    } else if (window.Spotify && config.spotify && config.spotify.accessToken) {
+        updatePlayerStatus('initializing', 'Initializing player...');
+    } else {
+        updatePlayerStatus('not-ready', 'Player not initialized');
+    }
 }
 
 // Render ticker list
@@ -412,12 +425,35 @@ spotifySearchInput.addEventListener('keypress', (e) => {
 spotifyClearBtn.addEventListener('click', clearSpotifySelection);
 
 // Spotify Player Functions (for config page)
+let playerInitializationAttempted = false;
+
 async function initializeSpotifyPlayer() {
-    if (!window.Spotify || !config.spotify || !config.spotify.accessToken) {
+    if (spotifyPlayerInstance) {
+        console.log('Player already initialized');
         return;
     }
 
+    if (!window.Spotify) {
+        console.error('Spotify SDK not loaded');
+        showMessage('Spotify SDK not loaded. Please refresh the page.', 'error');
+        return;
+    }
+
+    if (!config.spotify || !config.spotify.accessToken) {
+        console.error('No Spotify access token');
+        showMessage('Not connected to Spotify. Please connect first.', 'error');
+        return;
+    }
+
+    if (playerInitializationAttempted) {
+        console.log('Player initialization already attempted');
+        return;
+    }
+
+    playerInitializationAttempted = true;
+
     try {
+        console.log('Initializing Spotify player...');
         spotifyPlayerInstance = new Spotify.Player({
             name: 'Stock Viewer Config Player',
             getOAuthToken: cb => {
@@ -429,20 +465,31 @@ async function initializeSpotifyPlayer() {
         // Error handling
         spotifyPlayerInstance.addListener('initialization_error', ({message}) => {
             console.error('Spotify initialization error:', message);
+            updatePlayerStatus('error', `Initialization error: ${message}`);
+            showMessage(`Player initialization error: ${message}`, 'error');
+            playerInitializationAttempted = false;
         });
 
         spotifyPlayerInstance.addListener('authentication_error', ({message}) => {
             console.error('Spotify authentication error:', message);
+            updatePlayerStatus('error', 'Authentication error. Please reconnect.');
+            showMessage('Authentication error. Please reconnect to Spotify.', 'error');
+            playerInitializationAttempted = false;
         });
 
         spotifyPlayerInstance.addListener('account_error', ({message}) => {
             console.error('Spotify account error:', message);
+            updatePlayerStatus('error', 'Account error. Need Spotify Premium.');
+            showMessage('Account error. Make sure you have Spotify Premium.', 'error');
+            playerInitializationAttempted = false;
         });
 
         // Ready
         spotifyPlayerInstance.addListener('ready', ({device_id}) => {
             console.log('Spotify player ready with device ID:', device_id);
             spotifyDeviceId = device_id;
+            updatePlayerStatus('ready', 'Player ready!');
+            showMessage('Player ready!', 'success');
             
             // If there's a selected item, play it
             if (config.spotify && config.spotify.selectedItem) {
@@ -456,6 +503,7 @@ async function initializeSpotifyPlayer() {
         // Not ready
         spotifyPlayerInstance.addListener('not_ready', ({device_id}) => {
             console.log('Spotify device has gone offline:', device_id);
+            spotifyDeviceId = null;
         });
 
         // Player state changed
@@ -466,9 +514,24 @@ async function initializeSpotifyPlayer() {
         });
 
         // Connect to the player
-        await spotifyPlayerInstance.connect();
+        updatePlayerStatus('initializing', 'Connecting to Spotify...');
+        const connected = await spotifyPlayerInstance.connect();
+        console.log('Player connect result:', connected);
+        
+        if (!connected) {
+            console.error('Failed to connect player');
+            updatePlayerStatus('error', 'Failed to connect. Click to retry.');
+            showMessage('Failed to connect player. Please try again.', 'error');
+            playerInitializationAttempted = false;
+            spotifyPlayerInstance = null;
+        } else {
+            updatePlayerStatus('connecting', 'Waiting for device...');
+        }
     } catch (error) {
         console.error('Error initializing Spotify player:', error);
+        showMessage(`Error initializing player: ${error.message}`, 'error');
+        playerInitializationAttempted = false;
+        spotifyPlayerInstance = null;
     }
 }
 
@@ -545,10 +608,37 @@ function updatePlayPauseButton() {
     }
 }
 
+function updatePlayerStatus(status, message) {
+    if (!spotifyStatusText) return;
+    
+    spotifyStatusText.textContent = message;
+    spotifyStatusText.className = `spotify-status-${status}`;
+    
+    if (spotifyInitBtn) {
+        if (status === 'error' || status === 'not-ready') {
+            spotifyInitBtn.style.display = 'inline-block';
+        } else {
+            spotifyInitBtn.style.display = 'none';
+        }
+    }
+}
+
 async function togglePlayPause() {
+    // Check if player is initialized
+    if (!spotifyPlayerInstance) {
+        console.log('Player not initialized, attempting to initialize...');
+        await initializeSpotifyPlayer();
+        // Wait a bit for initialization
+        await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+
     if (!spotifyPlayerInstance || !spotifyDeviceId || !config.spotify || !config.spotify.accessToken) {
-        console.error('Spotify player not ready');
-        showMessage('Player not ready. Please wait...', 'error');
+        console.error('Spotify player not ready', {
+            hasInstance: !!spotifyPlayerInstance,
+            hasDeviceId: !!spotifyDeviceId,
+            hasToken: !!(config.spotify && config.spotify.accessToken)
+        });
+        showMessage('Player not ready. Please wait a moment and try again.', 'error');
         return;
     }
 
@@ -591,9 +681,14 @@ async function togglePlayPause() {
 }
 
 async function playPrevious() {
+    if (!spotifyPlayerInstance) {
+        await initializeSpotifyPlayer();
+        await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+
     if (!spotifyPlayerInstance || !spotifyDeviceId || !config.spotify || !config.spotify.accessToken) {
         console.error('Spotify player not ready');
-        showMessage('Player not ready', 'error');
+        showMessage('Player not ready. Please wait a moment and try again.', 'error');
         return;
     }
     
@@ -618,9 +713,14 @@ async function playPrevious() {
 }
 
 async function playNext() {
+    if (!spotifyPlayerInstance) {
+        await initializeSpotifyPlayer();
+        await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+
     if (!spotifyPlayerInstance || !spotifyDeviceId || !config.spotify || !config.spotify.accessToken) {
         console.error('Spotify player not ready');
-        showMessage('Player not ready', 'error');
+        showMessage('Player not ready. Please wait a moment and try again.', 'error');
         return;
     }
     
@@ -675,6 +775,17 @@ if (document.readyState === 'loading') {
     setupSpotifyEventListeners();
 }
 
+// Manual initialization button
+if (spotifyInitBtn) {
+    spotifyInitBtn.addEventListener('click', async () => {
+        playerInitializationAttempted = false;
+        spotifyPlayerInstance = null;
+        spotifyDeviceId = null;
+        updatePlayerStatus('initializing', 'Initializing...');
+        await initializeSpotifyPlayer();
+    });
+}
+
 // Check for Spotify callback
 window.addEventListener('load', () => {
     const urlParams = new URLSearchParams(window.location.search);
@@ -721,26 +832,45 @@ loadConfig();
 
 // Initialize Spotify player when SDK is ready
 function initSpotifyPlayer() {
-    if (window.Spotify) {
-        // Wait a bit for config to load
-        setTimeout(() => {
-            if (config.spotify && config.spotify.accessToken && !spotifyPlayerInstance) {
-                initializeSpotifyPlayer();
-            }
-        }, 1000);
-    } else {
-        window.onSpotifyWebPlaybackSDKReady = () => {
-            if (config.spotify && config.spotify.accessToken && !spotifyPlayerInstance) {
-                initializeSpotifyPlayer();
-            }
-        };
+    if (spotifyPlayerInstance) {
+        console.log('Player already initialized');
+        return;
     }
+
+    if (!window.Spotify) {
+        console.log('Spotify SDK not loaded yet');
+        return;
+    }
+
+    if (!config.spotify || !config.spotify.accessToken) {
+        console.log('No Spotify token available');
+        return;
+    }
+
+    console.log('Initializing Spotify player...');
+    initializeSpotifyPlayer();
 }
 
-// Initialize when page loads
-window.addEventListener('load', () => {
-    initSpotifyPlayer();
-});
+// Set up SDK ready callback
+if (window.Spotify) {
+    // SDK already loaded
+    window.addEventListener('load', () => {
+        setTimeout(() => {
+            if (config.spotify && config.spotify.accessToken) {
+                initSpotifyPlayer();
+            }
+        }, 1500);
+    });
+} else {
+    window.onSpotifyWebPlaybackSDKReady = () => {
+        console.log('Spotify SDK ready callback');
+        setTimeout(() => {
+            if (config.spotify && config.spotify.accessToken) {
+                initSpotifyPlayer();
+            }
+        }, 1500);
+    };
+}
 
 // Also try to initialize after config loads
 // This will be called from loadConfig() after it completes

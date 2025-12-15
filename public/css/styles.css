@@ -1018,3 +1018,32 @@ input[type="number"]:focus {
     border: none;
 }
 
+.spotify-player-status {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 1rem;
+    padding: 0.75rem;
+    background-color: var(--bg-primary);
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+}
+
+#spotify-status-text {
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+}
+
+.spotify-status-ready {
+    color: var(--accent-green) !important;
+}
+
+.spotify-status-error {
+    color: var(--accent-red) !important;
+}
+
+.spotify-status-initializing,
+.spotify-status-connecting {
+    color: var(--text-secondary);
+}
+
